@@ -9,6 +9,8 @@ import psutil
 import warnings
 import numpy as np
 import scipy.io.matlab as siom
+from scipy.signal.windows import dpss
+from scipy.linalg import toeplitz 
 
 # Import custom Python packages
 import pyspod.utils.parallel as utils_par
@@ -273,6 +275,7 @@ def compute_coeffs_conv(
         raise TypeError('n_dft must be an integer.')
 
     # determine correction for FFT window gain
+    # TODO need to modify for multitaper
     win_weight = 1 / np.mean(window)
     window = window.reshape(window.shape[0], 1)
 
@@ -652,22 +655,49 @@ def _hamming_window(N):
     window = (0.54 - 0.46 * np.cos(2 * np.pi * x / (N-1))).T
     return window
 
+# TODO
+def _multitaper_window(n_dft,bw,n_taper):
+    '''
+    SLEPSEC Discrete prolate spheroidal sequences of length nDFT and
+    time-halfbandwidth product bw.
+    We provide a default choice of n_taper by calculating 
+    the Shannon number, user can also specify the number of tapers used
+    
+    return shape: (n_dft,n_taper)
+    '''
+    # has some difference with the MATLAB tapers
+    window = dpss(n_dft,bw,Kmax = n_taper)
+    
+    return window.T
 
-# def _slepsec(n_dft, bw, n_tapers):
-#     '''
-#     SLEPSEC Discrete prolate spheroidal sequences of length nDFT and
-#     time-halfbandwidth product bw
-#     '''
-#     df      = bw / n_dft
-#     j       = np.arange(0:n_dft-1)
-#     r1      = [df * 2 * np.pi, np.sin(2 * np.pi * df * j) ./ j]
-#     # S       = toeplitz(r1)
-#     S       = toeplitz(r1)
-#     [U,L]   = np.eig(S)
-#     [~,idx] = np.sort(diag(L),'descend')
-#     U       = U[:,idx]
-#     window  = U[:,1:n_tapers]
-# return window
+# TODO    
+def _slepsec(n_dft, bw, n_tapers):
+    '''
+    SLEPSEC Discrete prolate spheroidal sequences of length nDFT and
+    time-halfbandwidth product bw
+    
+    return shape: (n_dft,n_taper)
+    '''
+    df = bw / n_dft
+    j = np.arange(1, n_dft)
+    r1 = np.empty(n_dft)
+    r1[0] = df * 2 * np.pi
+    r1[1:] = np.sin(2 * np.pi * df * j) / j
+    # S       = toeplitz(r1)
+    S = toeplitz(r1)
+    L, U = np.linalg.eig(S)
+    idx = np.argsort(L)[::-1]
+    # idx = np.argsort(L)
+    L1 = L[idx]
+    U = U[:,idx]
+    window  = U[:,0:10]
+
+    return window
+
+# TODO for test use
+def ext_win():
+    window = np.load('window.npy')
+    return window
 
 
 def _configure_parallel(comm):

@@ -67,6 +67,12 @@ class Base():
         self._savedir = params.get('savedir', os.path.join(CWD,'spod_results'))
         self._savedir = os.path.join(CWD, self._savedir)
         params['savedir'] = self._savedir
+        #TODO number of tapers, default is 1
+        self._n_tapers = params.get('n_tapers', 1)
+        #TODO taper bandwidth, default is 0 (nou use multitaper)
+        self._bw = params.get('half_bandwidth', 1)
+        # TODO number of total samples, used later
+        self._n_samples = 1
 
         ## parse other inputs
         self._params = params
@@ -90,10 +96,27 @@ class Base():
 
         # get default spectral estimation parameters and options
         # define default spectral estimation parameters
+        #TODO if self._n_tapers > 1, switch to multitaper, add taper loop
         if isinstance(self._n_dft, int):
-            self._window = utils_spod._hamming_window(self._n_dft)
-            self._window = self._set_dtype(self._window)
-            self._window_name = 'hamming'
+            if isinstance(self._n_tapers, int):
+                if self._n_tapers == 1:
+                    self._window = utils_spod._hamming_window(self._n_dft)
+                    self._window = self._set_dtype(self._window)
+                    self._window_name = 'hamming'
+                # elif self._n_tapers > 1: # multitaper
+                #     self._window = utils_spod._multitaper_window(self._n_dft,self._bw,self._n_tapers)
+                #     self._window = self._set_dtype(self._window)
+                #     self._window_name = 'Multitaper'
+                elif self._n_tapers > 1: # multitaper
+                    self._window = utils_spod.ext_win()
+                    # self._window = utils_spod._slepsec(self._n_dft,self._bw,self._n_tapers)
+                    self._window = self._set_dtype(self._window)
+                    self._window_name = 'Slepsec'
+                else: 
+                    raise ValueError('n_tapers must be a positive interger.')
+            else:
+                raise TypeError('n_tapers must be an integer.')
+                
         else:
             raise TypeError('n_dft must be an integer.')
 
@@ -355,6 +378,16 @@ class Base():
         :rtype: np.ndarray
         '''
         return self._weights
+    #TODO
+    @property
+    def n_tapers(self):
+        '''
+        Get the number of tapers used to window the series.
+
+        :return: number of tapers used to window the series.
+        :rtype: int
+        '''
+        return self._n_tapers
 
     # --------------------------------------------------------------------------
 
@@ -461,16 +494,22 @@ class Base():
             self._n_modes_save = self._n_blocks
 
         # determine correction for FFT window gain
-        self._win_weight = 1 / np.mean(self._window)
-        self._window = self._window.reshape(self._window.shape[0], 1)
+        # TODO if n_taper > 1, calculate gain and window later
+        if self._n_tapers == 1:
+            self._win_weight = 1 / np.mean(self._window)
+            self._window = self._window.reshape(self._window.shape[0], 1)
 
         # get frequency axis
         self.get_freq_axis()
 
         # get default for confidence interval
-        self._xi2_upper = 2 * sc.gammaincinv(self._n_blocks, 1 - self._c_level)
-        self._xi2_lower = 2 * sc.gammaincinv(self._n_blocks,     self._c_level)
-        self._eigs_c = np.zeros([self._n_freq,self._n_blocks,2], dtype=complex)
+        # TODO change the matrix shape
+        # self._xi2_upper = 2 * sc.gammaincinv(self._n_blocks, 1 - self._c_level)
+        # self._xi2_lower = 2 * sc.gammaincinv(self._n_blocks,     self._c_level)
+        # self._eigs_c = np.zeros([self._n_freq,self._n_blocks, 2], dtype=complex)
+        self._xi2_upper = 2 * sc.gammaincinv(self._n_blocks* self._n_tapers, 1 - self._c_level)
+        self._xi2_lower = 2 * sc.gammaincinv(self._n_blocks* self._n_tapers,     self._c_level)
+        self._eigs_c = np.zeros([self._n_freq,self._n_blocks* self._n_tapers, 2], dtype=complex)
 
         ## create folder to save results
         self._savedir_sim = os.path.join(self._savedir,
@@ -576,7 +615,7 @@ class Base():
                     self._freq[int(self._n_dft/2)+1:] = \
                     self._freq[int(self._n_dft/2)+1:] - 1 / self._dt
                 else:
-                    self._freq[(n_dft+1)/2+1:] = \
+                    self._freq[(self._n_dft+1)/2+1:] = \
                     self._freq[(self._n_dft+1)/2+1:] - 1 / self._dt
         self._n_freq = len(self._freq)
 

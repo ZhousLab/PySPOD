@@ -142,3 +142,34 @@ def apply_normalization(
             print('No normalization performed')
             print('--------------------------')
     return weights
+
+# TODO add an trapzWeightsPolar function as matlab
+def trapzWeightsPolar(r,z):
+    '''
+    Use trapazoidal rule to weight cylindical coordinates
+    
+    :param numpy.ndarray r: r coordinate vector.
+    :param numpy.ndarray z: z coordinate vector.
+    
+    :return: the computed weights.
+    :rtype: numpy.ndarray
+    '''
+    # theta 
+    notheta = r.shape[0]
+    weight_t = np.zeros((notheta,1))
+    weight_t[0] = np.pi*pow((r[0] + (r[1]-r[0])/2),2)
+    for i in range(1,notheta-1):
+        weight_t[i] = np.pi*pow(( r[i] + (r[i+1]-r[i])/2 ),2) - np.pi*pow((r[i] - (r[i]-r[i-1])/2),2)
+    weight_t[notheta-1] = np.pi*pow(r[-1],2) - np.pi*pow(( r[-1] - (r[-1]-r[-2])/2 ),2)
+    
+    # z
+    noz = z.shape[0]
+    weight_z = np.zeros((noz,1))
+    weight_z[0] = (z[1]-z[0])/2
+    for i in range(1,noz-1):
+        weight_z[i] = (z[i] - z[i-1])/2 + (z[i+1]-z[i])/2
+    weight_z[noz-1] = (z[-1]-z[-2])/2
+
+    weight_tz = weight_t * weight_z.T
+    w = { 'weights_name': 'trapzWeightsPolar', 'weights': weight_tz }
+    return w
