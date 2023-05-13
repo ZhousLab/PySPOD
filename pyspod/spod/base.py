@@ -67,10 +67,10 @@ class Base():
         self._savedir = params.get('savedir', os.path.join(CWD,'spod_results'))
         self._savedir = os.path.join(CWD, self._savedir)
         params['savedir'] = self._savedir
-        #TODO number of tapers, default is 1
-        self._n_tapers = params.get('n_tapers', 1)
         #TODO taper bandwidth, default is 0 (nou use multitaper)
         self._bw = params.get('half_bandwidth', 1)
+        #TODO number of tapers, default is 1
+        self._n_tapers = params.get('n_tapers', int(self._bw*2-1))
         # TODO number of total samples, used later
         self._n_samples = 1
 
@@ -108,8 +108,8 @@ class Base():
                 #     self._window = self._set_dtype(self._window)
                 #     self._window_name = 'Multitaper'
                 elif self._n_tapers > 1: # multitaper
-                    self._window = utils_spod.ext_win()
-                    # self._window = utils_spod._slepsec(self._n_dft,self._bw,self._n_tapers)
+                    # self._window = utils_spod.ext_win()
+                    self._window = utils_spod._slepsec(self._n_dft,self._bw,self._n_tapers)
                     self._window = self._set_dtype(self._window)
                     self._window_name = 'Slepsec'
                 else: 
@@ -490,8 +490,8 @@ class Base():
         self._weights = self._set_dtype(self._weights)
 
         # set number of modes to save
-        if self._n_modes_save > self._n_blocks:
-            self._n_modes_save = self._n_blocks
+        if self._n_modes_save > self._n_blocks*self._n_tapers:
+            self._n_modes_save = self._n_blocks*self._n_tapers
 
         # determine correction for FFT window gain
         # TODO if n_taper > 1, calculate gain and window later
@@ -512,11 +512,20 @@ class Base():
         self._eigs_c = np.zeros([self._n_freq,self._n_blocks* self._n_tapers, 2], dtype=complex)
 
         ## create folder to save results
-        self._savedir_sim = os.path.join(self._savedir,
-            'nfft'+str(self._n_dft)
-            +'_novlp'+str(self._n_overlap) \
-            +'_nblks'+str(self._n_blocks)  \
-        )
+        if self._n_tapers > 1:
+            self._savedir_sim = os.path.join(self._savedir,
+                'nfft'+str(self._n_dft)
+                +'_novlp'+str(self._n_overlap) \
+                +'_nblks'+str(self._n_blocks)  \
+                +'_ntapers'+str(self._n_tapers) \
+            )
+        else:
+            self._savedir_sim = os.path.join(self._savedir,
+                'nfft'+str(self._n_dft)
+                +'_novlp'+str(self._n_overlap) \
+                +'_nblks'+str(self._n_blocks)  \
+            )
+                    
         if self._rank == 0:
             if not os.path.exists(self._savedir_sim):
                 os.makedirs(self._savedir_sim)

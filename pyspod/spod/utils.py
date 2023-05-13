@@ -690,7 +690,7 @@ def _slepsec(n_dft, bw, n_tapers):
     # idx = np.argsort(L)
     L1 = L[idx]
     U = U[:,idx]
-    window  = U[:,0:10]
+    window  = U[:,0:n_tapers]
 
     return window
 
