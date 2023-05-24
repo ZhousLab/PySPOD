@@ -52,7 +52,7 @@ class Standard(Base):
             blocks_present = self._are_blocks_present(
                 self._n_blocks, self._n_freq, self._blocks_folder, self._comm)
             
-        #TODO use sample to replace block, because each taper windowed block is a new sample    
+        #DONE use sample to replace block, because each taper windowed block is a new sample    
         self._n_samples = self._n_blocks * self._n_tapers
         # loop over number of blocks/samples and generate Fourier realizations,_
         # if blocks are not saved in storage
@@ -182,7 +182,7 @@ class Standard(Base):
             Q_var[Q_var < 4 * np.finfo(float).eps] = 1;
             Q_blk = Q_blk / Q_var
         # following lines should be inside n_taper loop
-        # TODO for i in i_samples
+        # DONE for i in i_samples
         if self._n_tapers == 1: 
             Q_blk = Q_blk * self._window
             Q_blk = self._set_dtype(Q_blk)
@@ -195,7 +195,7 @@ class Standard(Base):
             size_Q_blk_hat = [self._n_freq, self._data[0,...].size, self._n_tapers]
             Q_blk_hat = np.empty(size_Q_blk_hat, dtype=self._complex)
             for i_taper in range(self._n_tapers):
-                self._pr0(f'Taper {i_taper+1} / {self._n_tapers}')
+                self._pr0(f'Block {i_blk + 1} / { self._n_blocks} Taper {i_taper+1} / {self._n_tapers}')
                 # window and Fourier transform block
                 # print(Q_blk.shape)
                 Q_blk_win = Q_blk * np.expand_dims(self._window[:,i_taper],axis = -1)
@@ -216,7 +216,7 @@ class Standard(Base):
         M = [None]*self._n_freq
         for f in range(0,self._n_freq):
             Q_hat_f = np.squeeze(Q_hat[f,:,:])#.astype(complex)
-            # TODO also divide by n_tapers
+            # DONE also divide by n_tapers
             # M[f] = Q_hat_f.conj().T @ (Q_hat_f * self._weights) / self._n_blocks
             M[f] = Q_hat_f.conj().T @ (Q_hat_f * self._weights) / self._n_blocks / self._n_tapers
         del Q_hat_f
@@ -230,19 +230,22 @@ class Standard(Base):
         ## compute eigenvalues and eigenvectors
         L, V = la.eig(M)
         L = np.real_if_close(L, tol=1000000)
+        # TODO test M
+        self.m = M
         del M
 
 
         # reorder eigenvalues and eigenvectors
         ## double non-zero freq and non-Nyquist
         for f, Lf in enumerate(L):
-            idx = np.argsort(Lf)[::-1] # sort by frequency
+            idx = np.argsort(Lf)[::-1] # sort by eigenvalue
             L[f,:] = L[f,idx]
             vf = V[f,...]
             vf = vf[:,idx]
-            V[f] = vf
+            V[f,...] = vf
         self._pr0(f'- Eig computation: {time.time() - st} s.')
-
+        # TODO test V
+        self.v = V
         st = time.time()
 
         # compute spatial modes for given frequency

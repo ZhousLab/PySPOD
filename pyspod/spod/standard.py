@@ -51,21 +51,15 @@ class Standard(Base):
         if self._reuse_blocks:
             blocks_present = self._are_blocks_present(
                 self._n_blocks, self._n_freq, self._blocks_folder, self._comm)
-            
-        #TODO use sample to replace block, because each taper windowed block is a new sample    
-        self._n_samples = self._n_blocks * self._n_tapers
-        # loop over number of blocks/samples and generate Fourier realizations,_
+
+        # loop over number of blocks and generate Fourier realizations,
         # if blocks are not saved in storage
-        # replace n_blocks with n_samples
-        # size_Q_hat = [self._n_freq, self._data[0,...].size, self._n_blocks]
-        size_Q_hat = [self._n_freq, self._data[0,...].size, self._n_samples]
+        size_Q_hat = [self._n_freq, self._data[0,...].size, self._n_blocks]
         Q_hat = np.empty(size_Q_hat, dtype=self._complex)
         ## check if blocks already computed or not
-        # TODO leave stored blocks later
         if blocks_present:
             # load blocks if present
             size_Q_hat = [self._n_freq, *self._xshape, self._n_blocks]
-            # size_Q_hat = [self._n_freq, *self._xshape, self._n_samples]
             Q_hat = np.empty(size_Q_hat, dtype=self._complex)
             for i_blk in range(0, self._n_blocks):
                 print(f'Loading block {i_blk}/{self._n_blocks}')
@@ -79,19 +73,15 @@ class Standard(Base):
             Q_hat = np.reshape(Q_hat, shape)
         else:
             # loop over number of blocks and generate Fourier realizations
-            # size_Q_hat = [self._n_freq, self._data[0,...].size, self._n_blocks]
-            size_Q_hat = [self._n_freq, self._data[0,...].size, self._n_samples]
+            size_Q_hat = [self._n_freq, self._data[0,...].size, self._n_blocks]
             Q_hat = np.empty(size_Q_hat, dtype=self._complex)
             for i_blk in range(0,self._n_blocks):
                 st = time.time()
 
                 # compute block
-                #TODO this function is modified, if we have taper
-                # Q_blk_hat shape[self._n_freq, self._data[0,...].size, self._n_tapers]
                 Q_blk_hat, offset = self._compute_blocks(i_blk)
 
                 # save FFT blocks in storage memory
-                # TODO leave later
                 if self._savefft == True:
                     for i_freq in range(0, self._n_freq):
                         Q_blk_hat_fr = Q_blk_hat[i_freq,:]
@@ -111,21 +101,7 @@ class Standard(Base):
                           f'Elapsed time: {time.time() - st} s.')
 
                 ## store FFT blocks in RAM
-                # TODO i_blk -> i_sample, i_blk*n_taper,e.g.
-                # print(Q_hat.shape)
-                # print(Q_blk_hat.shape)
-                # Q_hat[:,:,i_blk] = Q_blk_hat
-                # Q_hat[:,:,i_blk*self._n_tapers:(i_blk+1)*self._n_tapers] = np.expand_dims(Q_blk_hat, axis = -1)
-                # check matrix here
-                if self._n_tapers > 1:
-                    # TODO
-                    # Resample as: iSample = iBlk+((iTaper-1)*nBlks); # should be some problem
-                    for i_taper in range(self._n_tapers):
-                        # Q_hat[:,:,i_blk*self._n_tapers:(i_blk+1)*self._n_tapers] = Q_blk_hat
-                        Q_hat[:,:,i_blk+i_taper*self._n_blocks] = Q_blk_hat[:,:,i_taper]
-                else:
-                    Q_hat[:,:,i_blk] = Q_blk_hat
-                
+                Q_hat[:,:,i_blk] = Q_blk_hat
             del Q_blk_hat
         del self._data
 
@@ -138,7 +114,7 @@ class Standard(Base):
         self._pr0(f' ')
         self._pr0(f'Calculating SPOD (parallel)')
         self._pr0(f'------------------------------------')
-        self._eigs = np.zeros([self._n_freq,self._n_blocks*self._n_tapers],
+        self._eigs = np.zeros([self._n_freq,self._n_blocks],
             dtype=self._complex)
 
         ## compute standard spod
@@ -179,33 +155,13 @@ class Standard(Base):
             # address division-by-0 problem with NaNs
             Q_var[Q_var < 4 * np.finfo(float).eps] = 1;
             Q_blk = Q_blk / Q_var
-        # following lines should be inside n_taper loop
-        # TODO for i in i_samples
-        if self._n_tapers == 1: 
-            Q_blk = Q_blk * self._window
-            Q_blk = self._set_dtype(Q_blk)
-            Q_blk_hat = (self._win_weight / self._n_dft) * np.fft.fft(Q_blk, axis=0)
-            Q_blk_hat = Q_blk_hat[0:self._n_freq,:]
-        else:
-            # update win weight
-            self._win_weight = 1 / np.mean(np.abs(self._window), axis = 0)
-            # n_taper loop, the shape of Q_blk_hat change to[n_freq,n_field_points, n_tapers]
-            size_Q_blk_hat = [self._n_freq, self._data[0,...].size, self._n_tapers]
-            Q_blk_hat = np.empty(size_Q_blk_hat, dtype=self._complex)
-            for i_taper in range(self._n_tapers):
-                self._pr0(f'Taper {i_taper} / {self._n_tapers}')
-                # window and Fourier transform block
-                # print(Q_blk.shape)
-                Q_blk = Q_blk * np.expand_dims(self._window[:,i_taper],axis = -1)
-                Q_blk = self._set_dtype(Q_blk)
-                # fft
-                Q_blk_hat_taper = (self._win_weight[i_taper] / self._n_dft) * np.fft.fft(Q_blk, axis=0)
-                Q_blk_hat_taper = Q_blk_hat_taper[0:self._n_freq,:]
-                Q_blk_hat[:,:,i_taper] = Q_blk_hat_taper
-            # print(Q_blk_hat.shape)
 
+        Q_blk = Q_blk * self._window
+        Q_blk = self._set_dtype(Q_blk)
+        Q_blk_hat = (self._win_weight / self._n_dft) * np.fft.fft(Q_blk, axis=0)
+        Q_blk_hat = Q_blk_hat[0:self._n_freq,:]
         return Q_blk_hat, offset
-    
+
 
     def _compute_standard_spod(self, Q_hat):
         '''Compute standard SPOD.'''
@@ -214,13 +170,9 @@ class Standard(Base):
         M = [None]*self._n_freq
         for f in range(0,self._n_freq):
             Q_hat_f = np.squeeze(Q_hat[f,:,:])#.astype(complex)
-            # TODO also divide by n_tapers
-            # M[f] = Q_hat_f.conj().T @ (Q_hat_f * self._weights) / self._n_blocks
-            M[f] = Q_hat_f.conj().T @ (Q_hat_f * self._weights) / self._n_blocks / self._n_tapers
+            M[f] = Q_hat_f.conj().T @ (Q_hat_f * self._weights) / self._n_blocks
         del Q_hat_f
-        
         M = np.stack(M)
-        
         M = utils_par.allreduce(data=M, comm=self._comm)
         self._pr0(f'- M computation: {time.time() - st} s.')
         st = time.time()
@@ -234,7 +186,7 @@ class Standard(Base):
         # reorder eigenvalues and eigenvectors
         ## double non-zero freq and non-Nyquist
         for f, Lf in enumerate(L):
-            idx = np.argsort(Lf)[::-1] # sort by frequency
+            idx = np.argsort(Lf)[::-1]
             L[f,:] = L[f,idx]
             vf = V[f,...]
             vf = vf[:,idx]
@@ -243,18 +195,13 @@ class Standard(Base):
         st = time.time()
 
         # compute spatial modes for given frequency
-        # TODO n_blok times n_taper
-        n_Indep = self._n_samples
-        # L_diag = np.sqrt(self._n_blocks) * np.sqrt(L)
-        L_diag = np.sqrt(n_Indep) * np.sqrt(L)
+        L_diag = np.sqrt(self._n_blocks) * np.sqrt(L)
         L_diag_inv = 1. / L_diag
         for f in range(0,self._n_freq):
             s0 = time.time()
             st = time.time()
             ## compute
-            # TODO
-            # phi = np.matmul(Q_hat[f,...], V[f,...] * L_diag_inv[f,None,:])
-            phi = np.matmul(Q_hat[f,...], V[f,...] * L_diag_inv[f,None,:])/(n_Indep)
+            phi = np.matmul(Q_hat[f,...], V[f,...] * L_diag_inv[f,None,:])
             phi = phi[...,0:self._n_modes_save]
             ## save modes
             filename = f'freq_idx_{f:08d}.npy'
@@ -276,9 +223,8 @@ class Standard(Base):
 
         # get eigenvalues and confidence intervals
         self._eigs = np.abs(L)
-        # fac_lower = 2 * self._n_blocks / self._xi2_lower
-        # fac_upper = 2 * self._n_blocks / self._xi2_upper
-        fac_lower = 2 * self._n_blocks * self._n_tapers / self._xi2_lower
-        fac_upper = 2 * self._n_blocks * self._n_tapers/ self._xi2_upper
+
+        fac_lower = 2 * self._n_blocks / self._xi2_lower
+        fac_upper = 2 * self._n_blocks / self._xi2_upper
         self._eigs_c[...,0] = self._eigs * fac_lower
         self._eigs_c[...,1] = self._eigs * fac_upper
