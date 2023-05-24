@@ -21,6 +21,22 @@ import pyspod.utils.errors   as utils_errors
 import pyspod.utils.io       as utils_io
 import pyspod.utils.postproc as post
 
+
+
+## -------------------------------------------------------------------
+## initialize MPI
+## -------------------------------------------------------------------
+try:
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.rank
+except:
+    comm = None
+    rank = 0
+## -------------------------------------------------------------------
+
+
+
 ## -------------------------------------------------------------------
 ## read data and params
 ## -------------------------------------------------------------------
@@ -49,7 +65,7 @@ weights = utils_weights.geo_trapz_2D(
 ## -------------------------------------------------------------------
 ## compute spod using Welch's method
 ## -------------------------------------------------------------------
-standard  = spod_standard(params=params, weights=weights)
+standard  = spod_standard(params=params, weights=weights, comm = comm)
 spod_stad = standard.fit(data_list=data)
 standard_results_dir = spod_stad.savedir_sim
 spod_stad.plot_eigs_vs_period()
@@ -60,7 +76,7 @@ spod_stad.plot_eigs_vs_period()
 ## -------------------------------------------------------------------
 params['half_bandwidth'] = 2   # by default it will set n_taper = 10
 # params['n_tapers'] = 3  # number of tapers can also be customized
-multitaper = spod_multitaper(params=params, weights=weights)
+multitaper = spod_multitaper(params=params, weights=weights, comm = comm)
 spod_mltp = multitaper.fit(data_list=data)
 multitaper_results_dir = spod_mltp.savedir_sim
 spod_mltp.plot_eigs_vs_period()

@@ -51,8 +51,7 @@ class Standard(Base):
         if self._reuse_blocks:
             blocks_present = self._are_blocks_present(
                 self._n_blocks, self._n_freq, self._blocks_folder, self._comm)
-            
-        #DONE use sample to replace block, because each taper windowed block is a new sample    
+                
         self._n_samples = self._n_blocks * self._n_tapers
         # loop over number of blocks/samples and generate Fourier realizations,_
         # if blocks are not saved in storage
@@ -86,12 +85,11 @@ class Standard(Base):
                 st = time.time()
 
                 # compute block
-                #TODO this function is modified, if we have taper
                 # Q_blk_hat shape[self._n_freq, self._data[0,...].size, self._n_tapers]
                 Q_blk_hat, offset = self._compute_blocks(i_blk)
 
                 # save FFT blocks in storage memory
-                # TODO leave later
+                # TODO leave later, if taper, modify name
                 if self._savefft == True:
                     for i_freq in range(0, self._n_freq):
                         Q_blk_hat_fr = Q_blk_hat[i_freq,:]
@@ -111,23 +109,13 @@ class Standard(Base):
                           f'Elapsed time: {time.time() - st} s.')
 
                 ## store FFT blocks in RAM
-                # TODO i_blk -> i_sample, i_blk*n_taper,e.g.
-                # print(Q_hat.shape)
-                # print(Q_blk_hat.shape)
-                # Q_hat[:,:,i_blk] = Q_blk_hat
-                # Q_hat[:,:,i_blk*self._n_tapers:(i_blk+1)*self._n_tapers] = np.expand_dims(Q_blk_hat, axis = -1)
-                # check matrix here
                 if self._n_tapers > 1:
                     # TODO
                     # Resample as: iSample = iBlk+((iTaper-1)*nBlks); # should be some problem
                     for i_taper in range(self._n_tapers):
-                        # Q_hat[:,:,i_blk*self._n_tapers:(i_blk+1)*self._n_tapers] = Q_blk_hat
                         Q_hat[:,:,i_blk+i_taper*self._n_blocks] = Q_blk_hat[:,:,i_taper]
-                        # print(Q_hat.shape)
                 else:
                     Q_hat[:,:,i_blk] = Q_blk_hat
-                # TODO test
-                self.Q_hat = Q_hat
             del Q_blk_hat
         del self._data
 
@@ -155,7 +143,6 @@ class Standard(Base):
         if self._comm: self._comm.Barrier()
         return self
 
-# TODO some problems
     def _compute_blocks(self, i_blk):
         '''Compute FFT blocks.'''
         # get time index for present block
@@ -182,7 +169,6 @@ class Standard(Base):
             Q_var[Q_var < 4 * np.finfo(float).eps] = 1;
             Q_blk = Q_blk / Q_var
         # following lines should be inside n_taper loop
-        # DONE for i in i_samples
         if self._n_tapers == 1: 
             Q_blk = Q_blk * self._window
             Q_blk = self._set_dtype(Q_blk)
@@ -216,8 +202,6 @@ class Standard(Base):
         M = [None]*self._n_freq
         for f in range(0,self._n_freq):
             Q_hat_f = np.squeeze(Q_hat[f,:,:])#.astype(complex)
-            # DONE also divide by n_tapers
-            # M[f] = Q_hat_f.conj().T @ (Q_hat_f * self._weights) / self._n_blocks
             M[f] = Q_hat_f.conj().T @ (Q_hat_f * self._weights) / self._n_blocks / self._n_tapers
         del Q_hat_f
         
@@ -230,7 +214,6 @@ class Standard(Base):
         ## compute eigenvalues and eigenvectors
         L, V = la.eig(M)
         L = np.real_if_close(L, tol=1000000)
-        # TODO test M
         self.m = M
         del M
 
@@ -244,12 +227,11 @@ class Standard(Base):
             vf = vf[:,idx]
             V[f,...] = vf
         self._pr0(f'- Eig computation: {time.time() - st} s.')
-        # TODO test V
         self.v = V
         st = time.time()
 
         # compute spatial modes for given frequency
-        # TODO n_blok times n_taper
+        # TODO, if blockwise, n_Indep = n_sample-1
         n_Indep = self._n_samples
         # L_diag = np.sqrt(self._n_blocks) * np.sqrt(L)
         L_diag = np.sqrt(n_Indep) * np.sqrt(L)
@@ -258,8 +240,6 @@ class Standard(Base):
             s0 = time.time()
             st = time.time()
             ## compute
-            # TODO
-            # phi = np.matmul(Q_hat[f,...], V[f,...] * L_diag_inv[f,None,:])
             phi = np.matmul(Q_hat[f,...], V[f,...] * L_diag_inv[f,None,:])
             phi = phi[...,0:self._n_modes_save]
             ## save modes
@@ -282,8 +262,6 @@ class Standard(Base):
 
         # get eigenvalues and confidence intervals
         self._eigs = np.abs(L)
-        # fac_lower = 2 * self._n_blocks / self._xi2_lower
-        # fac_upper = 2 * self._n_blocks / self._xi2_upper
         fac_lower = 2 * self._n_blocks * self._n_tapers / self._xi2_lower
         fac_upper = 2 * self._n_blocks * self._n_tapers/ self._xi2_upper
         self._eigs_c[...,0] = self._eigs * fac_lower
